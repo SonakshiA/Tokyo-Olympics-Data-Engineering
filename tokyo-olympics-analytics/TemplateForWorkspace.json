@@ -1,0 +1,1149 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"workspaceName": {
+			"type": "string",
+			"metadata": "Workspace name",
+			"defaultValue": "tokyo-olympics-analytics"
+		},
+		"ls_adls_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'ls_adls'"
+		},
+		"ls_blobstorage_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'ls_blobstorage'"
+		},
+		"tokyo-olympics-analytics-WorkspaceDefaultSqlServer_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'tokyo-olympics-analytics-WorkspaceDefaultSqlServer'",
+			"defaultValue": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=tcp:tokyo-olympics-analytics.sql.azuresynapse.net,1433;Initial Catalog=@{linkedService().DBName}"
+		},
+		"AthleteHTTP_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://github.com/darshilparmar/tokyo-olympic-azure-data-engineering-project/raw/refs/heads/main/data/Athletes.csv"
+		},
+		"ls_adls_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://tokyoolympicdatasonakshi.dfs.core.windows.net/"
+		},
+		"ls_http_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://github.com/darshilparmar/tokyo-olympic-azure-data-engineering-project/raw/refs/heads/main/data/"
+		},
+		"tokyo-olympics-analytics-WorkspaceDefaultStorage_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://tokyoolympicdatasonakshi.dfs.core.windows.net"
+		}
+	},
+	"variables": {
+		"workspaceId": "[concat('Microsoft.Synapse/workspaces/', parameters('workspaceName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('workspaceName'), '/data_ingestion')]",
+			"type": "Microsoft.Synapse/workspaces/pipelines",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"activities": [
+					{
+						"name": "ForEach_CopyCSVFiles",
+						"type": "ForEach",
+						"dependsOn": [],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@pipeline().parameters.fileNames",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "CopyFiles_HTTPToBlob",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "DelimitedTextSource",
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "GET"
+											},
+											"formatSettings": {
+												"type": "DelimitedTextReadSettings"
+											}
+										},
+										"sink": {
+											"type": "DelimitedTextSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "DelimitedTextWriteSettings",
+												"quoteAllText": true,
+												"fileExtension": ".txt"
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "ds_source",
+											"type": "DatasetReference",
+											"parameters": {
+												"relativeUrl": {
+													"value": "@item()",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "ds_sink",
+											"type": "DatasetReference",
+											"parameters": {
+												"fileName": {
+													"value": "@item()",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"fileNames": {
+						"type": "array",
+						"defaultValue": [
+							"Athletes.csv",
+							"Coaches.csv",
+							"EntriesGender.csv",
+							"Medals.csv",
+							"Teams.csv"
+						]
+					}
+				},
+				"annotations": [],
+				"lastPublishTime": "2025-09-01T09:17:16Z"
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/datasets/ds_source')]",
+				"[concat(variables('workspaceId'), '/datasets/ds_sink')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ds_sink')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_adls",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"fileName": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().fileName",
+							"type": "Expression"
+						},
+						"folderPath": "raw-data",
+						"fileSystem": "tokyo-olympic-data"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/ls_adls')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ds_source')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_http",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"relativeUrl": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "HttpServerLocation",
+						"relativeUrl": {
+							"value": "@dataset().relativeUrl",
+							"type": "Expression"
+						}
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/ls_http')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AthleteHTTP')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "HttpServer",
+				"typeProperties": {
+					"url": "[parameters('AthleteHTTP_properties_typeProperties_url')]",
+					"enableServerCertificateValidation": true,
+					"authenticationType": "Anonymous"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ls_adls')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('ls_adls_properties_typeProperties_url')]",
+					"accountKey": {
+						"type": "SecureString",
+						"value": "[parameters('ls_adls_accountKey')]"
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ls_blobstorage')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobStorage",
+				"typeProperties": {
+					"connectionString": "[parameters('ls_blobstorage_connectionString')]"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ls_http')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "HttpServer",
+				"typeProperties": {
+					"url": "[parameters('ls_http_properties_typeProperties_url')]",
+					"enableServerCertificateValidation": true,
+					"authenticationType": "Anonymous"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/tokyo-olympics-analytics-WorkspaceDefaultSqlServer')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"parameters": {
+					"DBName": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"type": "AzureSqlDW",
+				"typeProperties": {
+					"connectionString": "[parameters('tokyo-olympics-analytics-WorkspaceDefaultSqlServer_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/tokyo-olympics-analytics-WorkspaceDefaultStorage')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('tokyo-olympics-analytics-WorkspaceDefaultStorage_properties_typeProperties_url')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AutoResolveIntegrationRuntime')]",
+			"type": "Microsoft.Synapse/workspaces/integrationRuntimes",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "Managed",
+				"typeProperties": {
+					"computeProperties": {
+						"location": "AutoResolve",
+						"dataFlowProperties": {
+							"computeType": "General",
+							"coreCount": 8,
+							"timeToLive": 0
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/WorkspaceSystemIdentity')]",
+			"type": "Microsoft.Synapse/workspaces/credentials",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "ManagedIdentity",
+				"typeProperties": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/SQL script 1')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "-- Count the number of athletes from each country\n\nSELECT Country, count(*) AS total_athletes from athletes group by country\norder by total_athletes DESC;\n\n-- Calculate total medals won by each country\nSELECT TeamCountry, SUM(gold) Total_Gold, SUM(silver) Total_Silver, SUM(bronze) Total_Bronze from medals group by TeamCountry;\n\n-- Calculate the average number of entries by gender for each discipline\nSELECT Discipline,\nAVG(Female) Avg_Female,\nAVG(Male) Avg_Male\nFROM entriesgender\nGROUP BY Discipline;",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "TokyoOlympicsDB",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/TokyoOlympicsDB')]",
+			"type": "Microsoft.Synapse/workspaces/databases",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"Ddls": [
+					{
+						"ActionType": "CREATE",
+						"OldEntity": null,
+						"NewEntity": {
+							"Name": "TokyoOlympicsDB",
+							"EntityType": "DATABASE",
+							"Origin": {
+								"Type": "SPARK"
+							},
+							"Properties": {
+								"IsSyMSCDMDatabase": true
+							},
+							"Source": {
+								"Provider": "ADLS",
+								"Location": "abfss://tokyo-olympic-data@tokyoolympicdatasonakshi.dfs.core.windows.net/TokyoOlympicsDB",
+								"Properties": {
+									"FormatType": "csv",
+									"LinkedServiceName": "tokyo-olympics-analytics-WorkspaceDefaultStorage"
+								}
+							},
+							"PublishStatus": "PUBLISHED",
+							"ObjectVersion": 3,
+							"ObjectId": "382c3320-292f-4514-ba6b-c4a88200027a"
+						},
+						"Source": {
+							"Type": "SPARK"
+						}
+					},
+					{
+						"ActionType": "CREATE",
+						"OldEntity": null,
+						"NewEntity": {
+							"Name": "athletes",
+							"EntityType": "TABLE",
+							"TableType": "EXTERNAL",
+							"Namespace": {
+								"SchemaName": null,
+								"DatabaseName": "TokyoOlympicsDB",
+								"DatabaseId": null
+							},
+							"StorageDescriptor": {
+								"Distribution": null,
+								"Columns": [
+									{
+										"Name": "PersonName",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "string",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 8000,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "string"
+											}
+										}
+									},
+									{
+										"Name": "Country",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "string",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 8000,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "string"
+											}
+										}
+									},
+									{
+										"Name": "Discipline",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "string",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 8000,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "string"
+											}
+										}
+									}
+								],
+								"ColumnSetEntityName": "f5371244-a9ab-488e-b399-e13967cfd6af",
+								"Format": {
+									"InputFormat": "org.apache.hadoop.mapred.SequenceFileInputFormat",
+									"OutputFormat": "org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat",
+									"FormatType": "csv",
+									"SerializeLib": "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+									"Properties": {
+										"path": "abfss://tokyo-olympic-data@tokyoolympicdatasonakshi.dfs.core.windows.net/transformed-data/athletes/part-00000-tid-6665525833823188777-9eab3cf6-9a14-4866-9edf-8c3f111d2c73-26-1-c000.csv",
+										"delimiter": ",",
+										"firstRowAsHeader": "true",
+										"multiLine": "false",
+										"serialization.format": "1",
+										"FormatTypeSetToDatabaseDefault": false,
+										"header": "true"
+									}
+								},
+								"Source": {
+									"Provider": "ADLS",
+									"Location": "abfss://tokyo-olympic-data@tokyoolympicdatasonakshi.dfs.core.windows.net/transformed-data/athletes/part-00000-tid-6665525833823188777-9eab3cf6-9a14-4866-9edf-8c3f111d2c73-26-1-c000.csv",
+									"Properties": {
+										"LinkedServiceName": "tokyo-olympics-analytics-WorkspaceDefaultStorage",
+										"LocationSetToDatabaseDefault": false
+									}
+								},
+								"Properties": {
+									"textinputformat.record.delimiter": ",",
+									"compression": "",
+									"derivedModelAttributeInfo": "{\"attributeReferences\":{}}"
+								},
+								"Compressed": false,
+								"SerDeInfo": null,
+								"IsStoredAsSubdirectories": false
+							},
+							"Owner": null,
+							"CreateTime": 0,
+							"LastAccessTime": 0,
+							"Retention": 0,
+							"Temporary": false,
+							"IsRewriteEnabled": false,
+							"ViewOriginalText": null,
+							"ViewExpandedText": null,
+							"Origin": {
+								"Type": "SPARK"
+							},
+							"OriginObjectId": null,
+							"IsSharedEntity": false,
+							"PublishStatus": "PUBLISHED",
+							"Properties": {
+								"Description": "",
+								"DisplayFolderInfo": "{\"name\":\"Others\",\"colorCode\":\"\"}",
+								"PrimaryKeys": "",
+								"spark.sql.sources.provider": "csv",
+								"spark.sql.sources.schema.numParts": "1",
+								"spark.sql.sources.schema.part.0": "{\"type\":\"struct\",\"fields\":[{\"name\":\"PersonName\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Country\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Discipline\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}}]}"
+							},
+							"ObjectVersion": 1,
+							"ObjectId": "5f949f1e-146b-4f1d-afe4-ed41d3fce044",
+							"Description": ""
+						},
+						"Source": {
+							"Type": "SPARK"
+						}
+					},
+					{
+						"ActionType": "CREATE",
+						"OldEntity": null,
+						"NewEntity": {
+							"Name": "coaches",
+							"EntityType": "TABLE",
+							"TableType": "EXTERNAL",
+							"Namespace": {
+								"SchemaName": null,
+								"DatabaseName": "TokyoOlympicsDB",
+								"DatabaseId": null
+							},
+							"StorageDescriptor": {
+								"Distribution": null,
+								"Columns": [
+									{
+										"Name": "Name",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "string",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 8000,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "string"
+											}
+										}
+									},
+									{
+										"Name": "Country",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "string",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 8000,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "string"
+											}
+										}
+									},
+									{
+										"Name": "Discipline",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "string",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 8000,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "string"
+											}
+										}
+									},
+									{
+										"Name": "Event",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "string",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 8000,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "string"
+											}
+										}
+									}
+								],
+								"ColumnSetEntityName": "84e5a4ab-eb62-4c10-9cf7-cb03080e0f1c",
+								"Format": {
+									"InputFormat": "org.apache.hadoop.mapred.SequenceFileInputFormat",
+									"OutputFormat": "org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat",
+									"FormatType": "csv",
+									"SerializeLib": "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+									"Properties": {
+										"path": "abfss://tokyo-olympic-data@tokyoolympicdatasonakshi.dfs.core.windows.net/transformed-data/coaches/part-00000-tid-7396479539141942229-eb5ded5c-b185-449c-b275-639941819f79-28-1-c000.csv",
+										"delimiter": ",",
+										"firstRowAsHeader": "true",
+										"multiLine": "false",
+										"serialization.format": "1",
+										"FormatTypeSetToDatabaseDefault": false,
+										"header": "true"
+									}
+								},
+								"Source": {
+									"Provider": "ADLS",
+									"Location": "abfss://tokyo-olympic-data@tokyoolympicdatasonakshi.dfs.core.windows.net/transformed-data/coaches/part-00000-tid-7396479539141942229-eb5ded5c-b185-449c-b275-639941819f79-28-1-c000.csv",
+									"Properties": {
+										"LinkedServiceName": "tokyo-olympics-analytics-WorkspaceDefaultStorage",
+										"LocationSetToDatabaseDefault": false
+									}
+								},
+								"Properties": {
+									"textinputformat.record.delimiter": ",",
+									"compression": "",
+									"derivedModelAttributeInfo": "{\"attributeReferences\":{}}"
+								},
+								"Compressed": false,
+								"SerDeInfo": null,
+								"IsStoredAsSubdirectories": false
+							},
+							"Owner": null,
+							"CreateTime": 0,
+							"LastAccessTime": 0,
+							"Retention": 0,
+							"Temporary": false,
+							"IsRewriteEnabled": false,
+							"ViewOriginalText": null,
+							"ViewExpandedText": null,
+							"Origin": {
+								"Type": "SPARK"
+							},
+							"OriginObjectId": null,
+							"IsSharedEntity": false,
+							"PublishStatus": "PUBLISHED",
+							"Properties": {
+								"Description": "",
+								"DisplayFolderInfo": "{\"name\":\"Others\",\"colorCode\":\"\"}",
+								"PrimaryKeys": "",
+								"spark.sql.sources.provider": "csv",
+								"spark.sql.sources.schema.numParts": "1",
+								"spark.sql.sources.schema.part.0": "{\"type\":\"struct\",\"fields\":[{\"name\":\"Name\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Country\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Discipline\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Event\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}}]}"
+							},
+							"ObjectVersion": 1,
+							"ObjectId": "f57e577a-df20-4083-a82c-c6763a422575",
+							"Description": ""
+						},
+						"Source": {
+							"Type": "SPARK"
+						}
+					},
+					{
+						"ActionType": "CREATE",
+						"OldEntity": null,
+						"NewEntity": {
+							"Name": "entriesgender",
+							"EntityType": "TABLE",
+							"TableType": "EXTERNAL",
+							"Namespace": {
+								"SchemaName": null,
+								"DatabaseName": "TokyoOlympicsDB",
+								"DatabaseId": null
+							},
+							"StorageDescriptor": {
+								"Distribution": null,
+								"Columns": [
+									{
+										"Name": "Discipline",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "string",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 8000,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "string"
+											}
+										}
+									},
+									{
+										"Name": "Female",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "long",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 0,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "long"
+											}
+										}
+									},
+									{
+										"Name": "Male",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "long",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 0,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "long"
+											}
+										}
+									},
+									{
+										"Name": "Total",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "long",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 0,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "long"
+											}
+										}
+									}
+								],
+								"ColumnSetEntityName": "b7b8a394-060a-4a50-b448-fe3a553fdd1a",
+								"Format": {
+									"InputFormat": "org.apache.hadoop.mapred.SequenceFileInputFormat",
+									"OutputFormat": "org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat",
+									"FormatType": "csv",
+									"SerializeLib": "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+									"Properties": {
+										"path": "abfss://tokyo-olympic-data@tokyoolympicdatasonakshi.dfs.core.windows.net/transformed-data/entriesgender/part-00000-tid-7480771034249132446-de6d2ee5-cbed-4c86-9ab1-28b9ecd9d45f-30-1-c000.csv",
+										"delimiter": ",",
+										"firstRowAsHeader": "true",
+										"multiLine": "false",
+										"serialization.format": "1",
+										"FormatTypeSetToDatabaseDefault": false,
+										"header": "true"
+									}
+								},
+								"Source": {
+									"Provider": "ADLS",
+									"Location": "abfss://tokyo-olympic-data@tokyoolympicdatasonakshi.dfs.core.windows.net/transformed-data/entriesgender/part-00000-tid-7480771034249132446-de6d2ee5-cbed-4c86-9ab1-28b9ecd9d45f-30-1-c000.csv",
+									"Properties": {
+										"LinkedServiceName": "tokyo-olympics-analytics-WorkspaceDefaultStorage",
+										"LocationSetToDatabaseDefault": false
+									}
+								},
+								"Properties": {
+									"textinputformat.record.delimiter": ",",
+									"compression": "",
+									"derivedModelAttributeInfo": "{\"attributeReferences\":{}}"
+								},
+								"Compressed": false,
+								"SerDeInfo": null,
+								"IsStoredAsSubdirectories": false
+							},
+							"Owner": null,
+							"CreateTime": 0,
+							"LastAccessTime": 0,
+							"Retention": 0,
+							"Temporary": false,
+							"IsRewriteEnabled": false,
+							"ViewOriginalText": null,
+							"ViewExpandedText": null,
+							"Origin": {
+								"Type": "SPARK"
+							},
+							"OriginObjectId": null,
+							"IsSharedEntity": false,
+							"PublishStatus": "PUBLISHED",
+							"Properties": {
+								"Description": "",
+								"DisplayFolderInfo": "{\"name\":\"Others\",\"colorCode\":\"\"}",
+								"PrimaryKeys": "",
+								"spark.sql.sources.provider": "csv",
+								"spark.sql.sources.schema.numParts": "1",
+								"spark.sql.sources.schema.part.0": "{\"type\":\"struct\",\"fields\":[{\"name\":\"Discipline\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Female\",\"type\":\"long\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Male\",\"type\":\"long\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Total\",\"type\":\"long\",\"nullable\":true,\"metadata\":{}}]}"
+							},
+							"ObjectVersion": 1,
+							"ObjectId": "3a37e9f6-4d61-495f-83b6-9eef37e9c63d",
+							"Description": ""
+						},
+						"Source": {
+							"Type": "SPARK"
+						}
+					},
+					{
+						"ActionType": "CREATE",
+						"OldEntity": null,
+						"NewEntity": {
+							"Name": "medals",
+							"EntityType": "TABLE",
+							"TableType": "EXTERNAL",
+							"Namespace": {
+								"SchemaName": null,
+								"DatabaseName": "TokyoOlympicsDB",
+								"DatabaseId": null
+							},
+							"Partitioning": {
+								"PartitionFunctionType": null,
+								"Keys": null
+							},
+							"StorageDescriptor": {
+								"Distribution": null,
+								"Columns": [
+									{
+										"Name": "Rank",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "long",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 0,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "long"
+											}
+										}
+									},
+									{
+										"Name": "TeamCountry",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "string",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 8000,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "string"
+											}
+										}
+									},
+									{
+										"Name": "Gold",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "long",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 0,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "long"
+											}
+										}
+									},
+									{
+										"Name": "Silver",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "long",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 0,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "long"
+											}
+										}
+									},
+									{
+										"Name": "Bronze",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "long",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 0,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "long"
+											}
+										}
+									},
+									{
+										"Name": "Total",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "long",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 0,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "long"
+											}
+										}
+									},
+									{
+										"Name": "Rank_by_Total",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "long",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 0,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "long"
+											}
+										}
+									}
+								],
+								"ColumnSetEntityName": "26ca602d-3774-450a-a4bb-6f256389c1b2",
+								"Format": {
+									"InputFormat": "org.apache.hadoop.mapred.SequenceFileInputFormat",
+									"OutputFormat": "org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat",
+									"FormatType": "csv",
+									"SerializeLib": "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+									"Properties": {
+										"path": "abfss://tokyo-olympic-data@tokyoolympicdatasonakshi.dfs.core.windows.net/transformed-data/medals/part-00000-tid-4995071983857441090-d31d88d8-b80c-4b43-aba9-453434c7a5a7-32-1-c000.csv",
+										"delimiter": ",",
+										"firstRowAsHeader": "true",
+										"multiLine": "false",
+										"serialization.format": "1",
+										"FormatTypeSetToDatabaseDefault": false,
+										"header": "true"
+									}
+								},
+								"Source": {
+									"Provider": "ADLS",
+									"Location": "abfss://tokyo-olympic-data@tokyoolympicdatasonakshi.dfs.core.windows.net/transformed-data/medals/part-00000-tid-4995071983857441090-d31d88d8-b80c-4b43-aba9-453434c7a5a7-32-1-c000.csv",
+									"Properties": {
+										"LinkedServiceName": "tokyo-olympics-analytics-WorkspaceDefaultStorage",
+										"LocationSetToDatabaseDefault": false
+									}
+								},
+								"Properties": {
+									"textinputformat.record.delimiter": ",",
+									"compression": "",
+									"derivedModelAttributeInfo": "{\"attributeReferences\":{}}"
+								},
+								"Compressed": false,
+								"SerDeInfo": null,
+								"IsStoredAsSubdirectories": false
+							},
+							"Owner": null,
+							"CreateTime": 0,
+							"LastAccessTime": 0,
+							"Retention": 0,
+							"Temporary": false,
+							"IsRewriteEnabled": false,
+							"ViewOriginalText": null,
+							"ViewExpandedText": null,
+							"Origin": {
+								"Type": "SPARK"
+							},
+							"OriginObjectId": null,
+							"IsSharedEntity": false,
+							"PublishStatus": "PUBLISHED",
+							"Properties": {
+								"Description": "",
+								"DisplayFolderInfo": "{\"name\":\"Others\",\"colorCode\":\"\"}",
+								"PrimaryKeys": "",
+								"spark.sql.sources.provider": "csv",
+								"spark.sql.sources.schema.numParts": "1",
+								"spark.sql.sources.schema.part.0": "{\"type\":\"struct\",\"fields\":[{\"name\":\"Rank\",\"type\":\"long\",\"nullable\":true,\"metadata\":{}},{\"name\":\"TeamCountry\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Gold\",\"type\":\"long\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Silver\",\"type\":\"long\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Bronze\",\"type\":\"long\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Total\",\"type\":\"long\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Rank_by_Total\",\"type\":\"long\",\"nullable\":true,\"metadata\":{}}]}"
+							},
+							"ObjectVersion": 1,
+							"ObjectId": "4685d4b2-f26b-4b3b-997c-a02d7bb79c0d",
+							"Description": ""
+						},
+						"Source": {
+							"Type": "SPARK"
+						}
+					},
+					{
+						"ActionType": "CREATE",
+						"OldEntity": null,
+						"NewEntity": {
+							"Name": "teams",
+							"EntityType": "TABLE",
+							"TableType": "EXTERNAL",
+							"Namespace": {
+								"SchemaName": null,
+								"DatabaseName": "TokyoOlympicsDB",
+								"DatabaseId": null
+							},
+							"StorageDescriptor": {
+								"Distribution": null,
+								"Columns": [
+									{
+										"Name": "TeamName",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "string",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 8000,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "string"
+											}
+										}
+									},
+									{
+										"Name": "Discipline",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "string",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 8000,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "string"
+											}
+										}
+									},
+									{
+										"Name": "Country",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "string",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 8000,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "string"
+											}
+										}
+									},
+									{
+										"Name": "Event",
+										"Description": null,
+										"OriginDataTypeName": {
+											"TypeName": "string",
+											"IsComplexType": false,
+											"IsNullable": true,
+											"Length": 8000,
+											"Precision": 0,
+											"Scale": 0,
+											"Properties": {
+												"HIVE_TYPE_STRING": "string"
+											}
+										}
+									}
+								],
+								"ColumnSetEntityName": "bcae56bc-aceb-4142-a2c6-50691c96fb33",
+								"Format": {
+									"InputFormat": "org.apache.hadoop.mapred.SequenceFileInputFormat",
+									"OutputFormat": "org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat",
+									"FormatType": "csv",
+									"SerializeLib": "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+									"Properties": {
+										"path": "abfss://tokyo-olympic-data@tokyoolympicdatasonakshi.dfs.core.windows.net/transformed-data/teams/part-00000-tid-5276745996493103650-8a0a3e25-4795-40c4-b8cf-dbc13ef352a4-34-1-c000.csv",
+										"delimiter": ",",
+										"firstRowAsHeader": "true",
+										"multiLine": "false",
+										"serialization.format": "1",
+										"FormatTypeSetToDatabaseDefault": false,
+										"header": "true"
+									}
+								},
+								"Source": {
+									"Provider": "ADLS",
+									"Location": "abfss://tokyo-olympic-data@tokyoolympicdatasonakshi.dfs.core.windows.net/transformed-data/teams/part-00000-tid-5276745996493103650-8a0a3e25-4795-40c4-b8cf-dbc13ef352a4-34-1-c000.csv",
+									"Properties": {
+										"LinkedServiceName": "tokyo-olympics-analytics-WorkspaceDefaultStorage",
+										"LocationSetToDatabaseDefault": false
+									}
+								},
+								"Properties": {
+									"textinputformat.record.delimiter": ",",
+									"compression": "",
+									"derivedModelAttributeInfo": "{\"attributeReferences\":{}}"
+								},
+								"Compressed": false,
+								"SerDeInfo": null,
+								"IsStoredAsSubdirectories": false
+							},
+							"Owner": null,
+							"CreateTime": 0,
+							"LastAccessTime": 0,
+							"Retention": 0,
+							"Temporary": false,
+							"IsRewriteEnabled": false,
+							"ViewOriginalText": null,
+							"ViewExpandedText": null,
+							"Origin": {
+								"Type": "SPARK"
+							},
+							"OriginObjectId": null,
+							"IsSharedEntity": false,
+							"PublishStatus": "PUBLISHED",
+							"Properties": {
+								"Description": "",
+								"DisplayFolderInfo": "{\"name\":\"Others\",\"colorCode\":\"\"}",
+								"PrimaryKeys": "",
+								"spark.sql.sources.provider": "csv",
+								"spark.sql.sources.schema.numParts": "1",
+								"spark.sql.sources.schema.part.0": "{\"type\":\"struct\",\"fields\":[{\"name\":\"TeamName\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Discipline\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Country\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}},{\"name\":\"Event\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}}]}"
+							},
+							"ObjectVersion": 1,
+							"ObjectId": "adaa67ed-a51a-4eb1-97a8-38795bb111f2",
+							"Description": ""
+						},
+						"Source": {
+							"Type": "SPARK"
+						}
+					}
+				]
+			},
+			"dependsOn": []
+		}
+	]
+}

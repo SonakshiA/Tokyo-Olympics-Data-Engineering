@@ -1,0 +1,30 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"workspaceName": {
+			"value": "tokyo-olympics-analytics"
+		},
+		"ls_adls_accountKey": {
+			"value": ""
+		},
+		"ls_blobstorage_connectionString": {
+			"value": ""
+		},
+		"tokyo-olympics-analytics-WorkspaceDefaultSqlServer_connectionString": {
+			"value": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=tcp:tokyo-olympics-analytics.sql.azuresynapse.net,1433;Initial Catalog=@{linkedService().DBName}"
+		},
+		"AthleteHTTP_properties_typeProperties_url": {
+			"value": "https://github.com/darshilparmar/tokyo-olympic-azure-data-engineering-project/raw/refs/heads/main/data/Athletes.csv"
+		},
+		"ls_adls_properties_typeProperties_url": {
+			"value": "https://tokyoolympicdatasonakshi.dfs.core.windows.net/"
+		},
+		"ls_http_properties_typeProperties_url": {
+			"value": "https://github.com/darshilparmar/tokyo-olympic-azure-data-engineering-project/raw/refs/heads/main/data/"
+		},
+		"tokyo-olympics-analytics-WorkspaceDefaultStorage_properties_typeProperties_url": {
+			"value": "https://tokyoolympicdatasonakshi.dfs.core.windows.net"
+		}
+	}
+}
