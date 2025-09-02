@@ -1,0 +1,9 @@
+{
+	"name": "tokyolympicdfsonakshi",
+	"location": "eastus",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "f721a455-0578-442e-aaf4-097617802ac6",
+		"tenantId": "e96d477c-5be6-480c-8c26-87b151c39652"
+	}
+}
